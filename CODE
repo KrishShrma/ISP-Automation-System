@@ -1,0 +1,525 @@
+# ISP-Automation-System (Java CLI)
+
+This single-file project shows a Maven-based Java CLI application for a simple ISP Automation System. The project stores data in a local JSON file (`data.json`) using Gson. It includes basic features:
+- Customer management (add, list, assign plan)
+- Plan management (add, list)
+- Billing (generate bill, list bills, pay bill)
+- Complaints (log, list)
+
+---
+
+## pom.xml
+
+```xml
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>com.isp</groupId>
+    <artifactId>isp-automation-system</artifactId>
+    <version>1.0-SNAPSHOT</version>
+    <properties>
+        <maven.compiler.source>11</maven.compiler.source>
+        <maven.compiler.target>11</maven.compiler.target>
+    </properties>
+    <dependencies>
+        <dependency>
+            <groupId>com.google.code.gson</groupId>
+            <artifactId>gson</artifactId>
+            <version>2.10.1</version>
+        </dependency>
+    </dependencies>
+</project>
+```
+
+---
+
+## Project files (package: com.isp)
+
+### src/main/java/com/isp/Main.java
+
+```java
+package com.isp;
+
+import com.isp.service.ISPService;
+
+import java.util.Scanner;
+
+public class Main {
+    public static void main(String[] args) {
+        ISPService service = new ISPService();
+        Scanner sc = new Scanner(System.in);
+        System.out.println("=== ISP Automation System (Java CLI) ===");
+
+        while (true) {
+            System.out.println();
+            System.out.println("1. Add Plan");
+            System.out.println("2. List Plans");
+            System.out.println("3. Add Customer");
+            System.out.println("4. List Customers");
+            System.out.println("5. Assign Plan to Customer");
+            System.out.println("6. Generate Bill");
+            System.out.println("7. List Bills");
+            System.out.println("8. Pay Bill");
+            System.out.println("9. Log Complaint");
+            System.out.println("10. List Complaints");
+            System.out.println("0. Exit");
+            System.out.print("Choose: ");
+            String choice = sc.nextLine().trim();
+            try {
+                switch (choice) {
+                    case "1": service.addPlanInteractive(sc); break;
+                    case "2": service.listPlans(); break;
+                    case "3": service.addCustomerInteractive(sc); break;
+                    case "4": service.listCustomers(); break;
+                    case "5": service.assignPlanInteractive(sc); break;
+                    case "6": service.generateBillInteractive(sc); break;
+                    case "7": service.listBills(); break;
+                    case "8": service.payBillInteractive(sc); break;
+                    case "9": service.logComplaintInteractive(sc); break;
+                    case "10": service.listComplaints(); break;
+                    case "0": System.out.println("Bye!"); service.shutdown(); System.exit(0); break;
+                    default: System.out.println("Invalid choice");
+                }
+            } catch (Exception e) {
+                System.out.println("Error: " + e.getMessage());
+                e.printStackTrace();
+            }
+        }
+    }
+}
+```
+
+---
+
+### src/main/java/com/isp/model/Customer.java
+
+```java
+package com.isp.model;
+
+public class Customer {
+    private String id;
+    private String name;
+    private String address;
+    private String phone;
+    private String planId; // assigned plan id, null if none
+
+    public Customer() {}
+
+    public Customer(String id, String name, String address, String phone) {
+        this.id = id;
+        this.name = name;
+        this.address = address;
+        this.phone = phone;
+    }
+
+    public String getId() { return id; }
+    public void setId(String id) { this.id = id; }
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
+    public String getAddress() { return address; }
+    public void setAddress(String address) { this.address = address; }
+    public String getPhone() { return phone; }
+    public void setPhone(String phone) { this.phone = phone; }
+    public String getPlanId() { return planId; }
+    public void setPlanId(String planId) { this.planId = planId; }
+
+    @Override
+    public String toString() {
+        return String.format("[%s] %s | %s | %s | Plan: %s", id, name, address, phone, planId == null ? "none" : planId);
+    }
+}
+```
+
+---
+
+### src/main/java/com/isp/model/Plan.java
+
+```java
+package com.isp.model;
+
+public class Plan {
+    private String id;
+    private String name;
+    private double monthlyPrice;
+    private String description;
+
+    public Plan() {}
+
+    public Plan(String id, String name, double monthlyPrice, String description) {
+        this.id = id;
+        this.name = name;
+        this.monthlyPrice = monthlyPrice;
+        this.description = description;
+    }
+
+    public String getId() { return id; }
+    public void setId(String id) { this.id = id; }
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
+    public double getMonthlyPrice() { return monthlyPrice; }
+    public void setMonthlyPrice(double monthlyPrice) { this.monthlyPrice = monthlyPrice; }
+    public String getDescription() { return description; }
+    public void setDescription(String description) { this.description = description; }
+
+    @Override
+    public String toString() {
+        return String.format("[%s] %s - ₹%.2f (%s)", id, name, monthlyPrice, description == null ? "" : description);
+    }
+}
+```
+
+---
+
+### src/main/java/com/isp/model/Bill.java
+
+```java
+package com.isp.model;
+
+import java.time.LocalDate;
+
+public class Bill {
+    private String id;
+    private String customerId;
+    private double amount;
+    private LocalDate dueDate;
+    private boolean paid;
+
+    public Bill() {}
+
+    public Bill(String id, String customerId, double amount, LocalDate dueDate) {
+        this.id = id;
+        this.customerId = customerId;
+        this.amount = amount;
+        this.dueDate = dueDate;
+        this.paid = false;
+    }
+
+    public String getId() { return id; }
+    public void setId(String id) { this.id = id; }
+    public String getCustomerId() { return customerId; }
+    public void setCustomerId(String customerId) { this.customerId = customerId; }
+    public double getAmount() { return amount; }
+    public void setAmount(double amount) { this.amount = amount; }
+    public LocalDate getDueDate() { return dueDate; }
+    public void setDueDate(LocalDate dueDate) { this.dueDate = dueDate; }
+    public boolean isPaid() { return paid; }
+    public void setPaid(boolean paid) { this.paid = paid; }
+
+    @Override
+    public String toString() {
+        return String.format("[%s] Customer: %s | ₹%.2f | Due: %s | %s", id, customerId, amount, dueDate, paid ? "PAID" : "DUE");
+    }
+}
+```
+
+---
+
+### src/main/java/com/isp/model/Complaint.java
+
+```java
+package com.isp.model;
+
+import java.time.LocalDateTime;
+
+public class Complaint {
+    private String id;
+    private String customerId;
+    private String description;
+    private String status; // OPEN, IN_PROGRESS, RESOLVED
+    private LocalDateTime createdAt;
+
+    public Complaint() {}
+
+    public Complaint(String id, String customerId, String description) {
+        this.id = id;
+        this.customerId = customerId;
+        this.description = description;
+        this.status = "OPEN";
+        this.createdAt = LocalDateTime.now();
+    }
+
+    public String getId() { return id; }
+    public void setId(String id) { this.id = id; }
+    public String getCustomerId() { return customerId; }
+    public void setCustomerId(String customerId) { this.customerId = customerId; }
+    public String getDescription() { return description; }
+    public void setDescription(String description) { this.description = description; }
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
+    public LocalDateTime getCreatedAt() { return createdAt; }
+    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+
+    @Override
+    public String toString() {
+        return String.format("[%s] Customer: %s | %s | %s | %s", id, customerId, status, createdAt.toString(), description);
+    }
+}
+```
+
+---
+
+### src/main/java/com/isp/storage/DataStore.java
+
+```java
+package com.isp.storage;
+
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.reflect.TypeToken;
+import com.isp.model.Bill;
+import com.isp.model.Complaint;
+import com.isp.model.Customer;
+import com.isp.model.Plan;
+
+import java.io.File;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.lang.reflect.Type;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+
+// Simple JSON-backed datastore using Gson. Thread-unsafe but fine for CLI.
+public class DataStore {
+    private final File file = new File("data.json");
+    private final Gson gson;
+
+    public List<Customer> customers = new ArrayList<>();
+    public List<Plan> plans = new ArrayList<>();
+    public List<Bill> bills = new ArrayList<>();
+    public List<Complaint> complaints = new ArrayList<>();
+
+    public DataStore() {
+        gson = new GsonBuilder()
+                .registerTypeAdapter(LocalDate.class, new LocalDateAdapter())
+                .registerTypeAdapter(LocalDateTime.class, new LocalDateTimeAdapter())
+                .setPrettyPrinting()
+                .create();
+        load();
+    }
+
+    public synchronized void load() {
+        try {
+            if (!file.exists()) {
+                save();
+                return;
+            }
+            FileReader fr = new FileReader(file);
+            Type t = new TypeToken<DataStore>(){}.getType();
+            DataStore ds = gson.fromJson(fr, t);
+            fr.close();
+            if (ds != null) {
+                this.customers = ds.customers != null ? ds.customers : new ArrayList<>();
+                this.plans = ds.plans != null ? ds.plans : new ArrayList<>();
+                this.bills = ds.bills != null ? ds.bills : new ArrayList<>();
+                this.complaints = ds.complaints != null ? ds.complaints : new ArrayList<>();
+            }
+        } catch (Exception e) {
+            System.out.println("Failed to load data.json: " + e.getMessage());
+        }
+    }
+
+    public synchronized void save() {
+        try (FileWriter fw = new FileWriter(file)) {
+            fw.write(gson.toJson(this));
+        } catch (Exception e) {
+            System.out.println("Failed to save data.json: " + e.getMessage());
+        }
+    }
+}
+```
+
+---
+
+### src/main/java/com/isp/storage/LocalDateAdapter.java
+
+```java
+package com.isp.storage;
+
+import com.google.gson.*;
+
+import java.lang.reflect.Type;
+import java.time.LocalDate;
+
+public class LocalDateAdapter implements JsonSerializer<LocalDate>, JsonDeserializer<LocalDate> {
+    @Override
+    public JsonElement serialize(LocalDate src, Type typeOfSrc, JsonSerializationContext context) {
+        return new JsonPrimitive(src.toString());
+    }
+
+    @Override
+    public LocalDate deserialize(JsonElement json, Type typeOfT, JsonDeserializationContext context) throws JsonParseException {
+        return LocalDate.parse(json.getAsString());
+    }
+}
+```
+
+---
+
+### src/main/java/com/isp/storage/LocalDateTimeAdapter.java
+
+```java
+package com.isp.storage;
+
+import com.google.gson.*;
+
+import java.lang.reflect.Type;
+import java.time.LocalDateTime;
+
+public class LocalDateTimeAdapter implements JsonSerializer<LocalDateTime>, JsonDeserializer<LocalDateTime> {
+    @Override
+    public JsonElement serialize(LocalDateTime src, Type typeOfSrc, JsonSerializationContext context) {
+        return new JsonPrimitive(src.toString());
+    }
+
+    @Override
+    public LocalDateTime deserialize(JsonElement json, Type typeOfT, JsonDeserializationContext context) throws JsonParseException {
+        return LocalDateTime.parse(json.getAsString());
+    }
+}
+```
+
+---
+
+### src/main/java/com/isp/service/ISPService.java
+
+```java
+package com.isp.service;
+
+import com.isp.model.Bill;
+import com.isp.model.Complaint;
+import com.isp.model.Customer;
+import com.isp.model.Plan;
+import com.isp.storage.DataStore;
+
+import java.time.LocalDate;
+import java.util.List;
+import java.util.Optional;
+import java.util.Scanner;
+import java.util.UUID;
+import java.util.stream.Collectors;
+
+public class ISPService {
+    private final DataStore ds = new DataStore();
+
+    // Plans
+    public void addPlanInteractive(Scanner sc) {
+        System.out.print("Plan name: ");
+        String name = sc.nextLine().trim();
+        System.out.print("Monthly price (numbers only): ");
+        double price = Double.parseDouble(sc.nextLine().trim());
+        System.out.print("Description: ");
+        String desc = sc.nextLine().trim();
+        Plan p = new Plan(UUID.randomUUID().toString(), name, price, desc);
+        ds.plans.add(p);
+        ds.save();
+        System.out.println("Added plan: " + p);
+    }
+
+    public void listPlans() {
+        List<Plan> plans = ds.plans;
+        if (plans.isEmpty()) { System.out.println("No plans yet."); return; }
+        plans.forEach(System.out::println);
+    }
+
+    // Customers
+    public void addCustomerInteractive(Scanner sc) {
+        System.out.print("Customer name: ");
+        String name = sc.nextLine().trim();
+        System.out.print("Address: ");
+        String address = sc.nextLine().trim();
+        System.out.print("Phone: ");
+        String phone = sc.nextLine().trim();
+        Customer c = new Customer(UUID.randomUUID().toString(), name, address, phone);
+        ds.customers.add(c);
+        ds.save();
+        System.out.println("Added customer: " + c);
+    }
+
+    public void listCustomers() {
+        List<Customer> customers = ds.customers;
+        if (customers.isEmpty()) { System.out.println("No customers yet."); return; }
+        customers.forEach(System.out::println);
+    }
+
+    public void assignPlanInteractive(Scanner sc) {
+        System.out.print("Customer ID: ");
+        String cid = sc.nextLine().trim();
+        Optional<Customer> oc = ds.customers.stream().filter(c -> c.getId().equals(cid)).findFirst();
+        if (!oc.isPresent()) { System.out.println("Customer not found"); return; }
+        System.out.print("Plan ID: ");
+        String pid = sc.nextLine().trim();
+        Optional<Plan> op = ds.plans.stream().filter(p -> p.getId().equals(pid)).findFirst();
+        if (!op.isPresent()) { System.out.println("Plan not found"); return; }
+        oc.get().setPlanId(pid);
+        ds.save();
+        System.out.println("Assigned plan " + pid + " to customer " + cid);
+    }
+
+    // Billing
+    public void generateBillInteractive(Scanner sc) {
+        System.out.print("Customer ID: ");
+        String cid = sc.nextLine().trim();
+        Optional<Customer> oc = ds.customers.stream().filter(c -> c.getId().equals(cid)).findFirst();
+        if (!oc.isPresent()) { System.out.println("Customer not found"); return; }
+        Customer c = oc.get();
+        if (c.getPlanId() == null) { System.out.println("Customer has no plan assigned"); return; }
+        Optional<Plan> op = ds.plans.stream().filter(p -> p.getId().equals(c.getPlanId())).findFirst();
+        if (!op.isPresent()) { System.out.println("Plan assigned to customer not found"); return; }
+        Plan p = op.get();
+        double amount = p.getMonthlyPrice();
+        Bill b = new Bill(UUID.randomUUID().toString(), cid, amount, LocalDate.now().plusDays(15));
+        ds.bills.add(b);
+        ds.save();
+        System.out.println("Generated bill: " + b);
+    }
+
+    public void listBills() {
+        if (ds.bills.isEmpty()) { System.out.println("No bills yet."); return; }
+        ds.bills.forEach(System.out::println);
+    }
+
+    public void payBillInteractive(Scanner sc) {
+        System.out.print("Bill ID: ");
+        String bid = sc.nextLine().trim();
+        Optional<Bill> ob = ds.bills.stream().filter(b -> b.getId().equals(bid)).findFirst();
+        if (!ob.isPresent()) { System.out.println("Bill not found"); return; }
+        Bill b = ob.get();
+        if (b.isPaid()) { System.out.println("Bill already paid"); return; }
+        b.setPaid(true);
+        ds.save();
+        System.out.println("Bill marked as paid: " + b);
+    }
+
+    // Complaints
+    public void logComplaintInteractive(Scanner sc) {
+        System.out.print("Customer ID: ");
+        String cid = sc.nextLine().trim();
+        Optional<Customer> oc = ds.customers.stream().filter(c -> c.getId().equals(cid)).findFirst();
+        if (!oc.isPresent()) { System.out.println("Customer not found"); return; }
+        System.out.print("Description: ");
+        String desc = sc.nextLine().trim();
+        Complaint cp = new Complaint(UUID.randomUUID().toString(), cid, desc);
+        ds.complaints.add(cp);
+        ds.save();
+        System.out.println("Logged complaint: " + cp);
+    }
+
+    public void listComplaints() {
+        if (ds.complaints.isEmpty()) { System.out.println("No complaints yet."); return; }
+        ds.complaints.forEach(System.out::println);
+    }
+
+    public void shutdown() { ds.save(); }
+}
+```
+
+---
+
+```
+mvn package
+java -jar target/isp-automation-system-1.0-SNAPSHOT.jar
+```
+
